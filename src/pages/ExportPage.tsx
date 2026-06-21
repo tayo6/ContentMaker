@@ -11,9 +11,12 @@ interface ExportPageProps {
   onBack: () => void;
 }
 
+// Only two honest formats: mp4 (direct download) or webm (canvas-rendered)
+type DownloadFormat = 'mp4' | 'webm';
+
 export default function ExportPage({ video, aspectRatio, textOverlay, audioConfig, onBack }: ExportPageProps) {
-  const [format, setFormat] = useState<'mp4' | 'mov'>('mp4');
-  const [fileExt, setFileExt] = useState<string>('mp4');
+  const [format, setFormat] = useState<DownloadFormat>('mp4');
+  const [fileExt, setFileExt] = useState<string>('webm');
   const [isExporting, setIsExporting] = useState(false);
   const [isDirectDownloading, setIsDirectDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -22,26 +25,21 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
   const anchorRef = useRef<HTMLAnchorElement>(null);
 
   const bestVideo = video.video_files.find(f => f.quality === 'hd') || video.video_files[0];
+  const needsRendering = !!textOverlay.text || !!audioConfig.url;
 
   const handleExport = async () => {
     if (!bestVideo) return;
     setError(null);
 
-    const needsRendering = !!textOverlay.text || !!audioConfig.url;
-
     if (!needsRendering) {
-      // Direct download via server proxy — no canvas, instant, full quality
+      // Direct proxy download — original quality, no canvas
       setIsDirectDownloading(true);
       try {
         const filename = `contentmaker-video-${Date.now()}.mp4`;
-        const downloadUrl = `/api/download?url=${encodeURIComponent(bestVideo.link)}&filename=${encodeURIComponent(filename)}`;
-
-        // Fetch as blob so we control the download locally
-        const res = await fetch(downloadUrl);
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
+        const res = await fetch(`/api/download?url=${encodeURIComponent(bestVideo.link)}&filename=${encodeURIComponent(filename)}`);
+        if (!res.ok) throw new Error(`Server error ${res.status}`);
         const blob = await res.blob();
         const objectUrl = URL.createObjectURL(blob);
-
         const a = document.createElement('a');
         a.href = objectUrl;
         a.download = filename;
@@ -50,14 +48,14 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
       } catch (e: any) {
-        setError('Direct download failed: ' + (e?.message || 'Unknown error'));
+        setError('Download failed: ' + (e?.message || 'Unknown error'));
       } finally {
         setIsDirectDownloading(false);
       }
       return;
     }
 
-    // Canvas render path (text overlay / audio)
+    // Canvas render path — always produces webm from MediaRecorder
     setIsExporting(true);
     setProgress(0);
     setGeneratedUrl(null);
@@ -67,14 +65,14 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
         aspectRatio,
         textOverlay,
         audioConfig,
-        format,
+        'mp4', // hint only; actual container determined by browser codec support
         (p) => setProgress(p)
       );
       setGeneratedUrl(url);
       setFileExt(ext);
     } catch (err: any) {
       console.error(err);
-      setError('Render failed: ' + (err?.message || 'Unknown error. Try a shorter video.'));
+      setError('Render failed: ' + (err?.message || 'Try a shorter video.'));
     } finally {
       setIsExporting(false);
     }
@@ -93,8 +91,7 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
-    } catch (e) {
-      // Fallback to direct anchor
+    } catch {
       if (anchorRef.current) {
         anchorRef.current.href = generatedUrl;
         anchorRef.current.download = `contentmaker-video-${Date.now()}.${fileExt}`;
@@ -107,7 +104,6 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* Hidden anchor for fallback downloads */}
       <a ref={anchorRef} style={{ display: 'none' }} />
 
       <div className="flex items-center justify-between mx-auto mb-8">
@@ -125,42 +121,47 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
 
         <h2 className="text-3xl font-bold text-gray-900 mb-2">Ready to Download</h2>
         <p className="text-gray-600 max-w-md mx-auto mb-8">
-          {textOverlay.text || audioConfig.url
-            ? 'Your video will be rendered with your edits applied, then downloaded.'
-            : 'Your video will be downloaded directly at full quality.'}
+          {needsRendering
+            ? 'Your video will be rendered with your edits, then saved as .webm (plays on all modern devices).'
+            : 'Your video will be downloaded at original quality as .mp4.'}
         </p>
 
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">
-            {error}
-          </div>
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
         )}
 
         {!isBusy && !generatedUrl && (
           <div className="max-w-sm mx-auto">
-            {/* Only show format picker when canvas-rendering (webm either way but label honestly) */}
-            {(textOverlay.text || audioConfig.url) && (
+            {/* Format picker only shown for plain downloads (no renders) */}
+            {!needsRendering && (
               <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
                 <button
                   onClick={() => setFormat('mp4')}
                   className={`flex-1 py-2 text-sm font-semibold rounded-md transition-colors ${format === 'mp4' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  .MP4 / .WebM
+                  .MP4
                 </button>
                 <button
-                  onClick={() => setFormat('mov')}
-                  className={`flex-1 py-2 text-sm font-semibold rounded-md transition-colors ${format === 'mov' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                  onClick={() => setFormat('webm')}
+                  className={`flex-1 py-2 text-sm font-semibold rounded-md transition-colors ${format === 'webm' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  .MOV
+                  .WebM
                 </button>
               </div>
             )}
+
+            {needsRendering && (
+              <div className="mb-6 bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-blue-700">
+                Edits detected — video will be rendered and saved as <strong>.webm</strong>
+              </div>
+            )}
+
             <button
               onClick={handleExport}
               className="w-full flex items-center justify-center px-6 py-4 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-sm"
             >
               <Download className="w-5 h-5 mr-2" />
-              {textOverlay.text || audioConfig.url ? 'Generate & Download' : 'Download Video'}
+              {needsRendering ? 'Render & Download' : 'Download Video'}
             </button>
           </div>
         )}
@@ -183,20 +184,20 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
         )}
 
         {generatedUrl && (
-          <div className="max-w-md mx-auto space-y-6">
+          <div className="max-w-md mx-auto">
             <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-              <h2 className="text-xl font-bold text-green-800 mb-2">Rendered Successfully!</h2>
-              <video src={generatedUrl} controls className="w-full rounded shadow-sm border border-black/10 mx-auto mb-4 bg-black" />
-              <div className="flex gap-4">
+              <h2 className="text-xl font-bold text-green-800 mb-3">Rendered Successfully!</h2>
+              <video src={generatedUrl} controls className="w-full rounded shadow-sm border border-black/10 mb-4 bg-black" />
+              <div className="flex gap-3">
                 <button
                   onClick={handleDownloadBlob}
                   className="flex-1 flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 transition"
                 >
-                  <Download className="w-4 h-4 mr-2" /> Download
+                  <Download className="w-4 h-4 mr-2" /> Save .{fileExt}
                 </button>
                 <button
                   onClick={() => { setGeneratedUrl(null); setError(null); }}
-                  className="flex items-center justify-center px-4 py-3 bg-white text-gray-700 border border-gray-300 rounded-md font-bold hover:bg-gray-50 transition"
+                  className="px-4 py-3 bg-white text-gray-700 border border-gray-300 rounded-md font-bold hover:bg-gray-50 transition"
                 >
                   Redo
                 </button>

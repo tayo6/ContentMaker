@@ -29,11 +29,10 @@ export default function TextPage({ video, aspectRatio, textOverlay, setTextOverl
   const boxW = Math.min(CONTAINER_H * ratio, 800);
   const boxH = boxW / ratio;
 
-  // Scale font size relative to the preview box height (canvas records at 800px reference)
+  // Scale font size to preview dimensions (canvas uses 800px as reference height)
   const previewFontSize = Math.floor(textOverlay.size * (boxH / 800));
 
   const getPositionStyle = (): React.CSSProperties => {
-    // All positions use top/transform so the div never pushes outside the box
     switch (textOverlay.position) {
       case 'top':    return { top: '12%',  transform: 'translateY(0)' };
       case 'bottom': return { top: '80%',  transform: 'translateY(-50%)' };
@@ -56,7 +55,7 @@ export default function TextPage({ video, aspectRatio, textOverlay, setTextOverl
 
       <div className="flex flex-col lg:flex-row gap-8">
 
-        {/* Preview — same sizing logic as ResizePage */}
+        {/* Preview */}
         <div
           className="flex-1 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center overflow-hidden"
           style={{ height: `${CONTAINER_H + 40}px` }}
@@ -76,7 +75,6 @@ export default function TextPage({ video, aspectRatio, textOverlay, setTextOverl
               className="absolute inset-0 w-full h-full object-cover pointer-events-none"
             />
 
-            {/* Text overlay — always visible, never pushes layout */}
             {textOverlay.text && (
               <div
                 style={{
@@ -84,7 +82,8 @@ export default function TextPage({ video, aspectRatio, textOverlay, setTextOverl
                   left: 0,
                   right: 0,
                   textAlign: 'center',
-                  padding: '0 16px',
+                  // ── FIX: horizontal padding creates wrap margins ──
+                  padding: '0 12px',
                   pointerEvents: 'none',
                   zIndex: 10,
                   ...getPositionStyle(),
@@ -97,9 +96,12 @@ export default function TextPage({ video, aspectRatio, textOverlay, setTextOverl
                       color: textOverlay.color,
                       fontSize: `${previewFontSize}px`,
                       fontWeight: 'bold',
-                      lineHeight: 1.2,
+                      lineHeight: 1.25,
                       textShadow: '0px 2px 10px rgba(0,0,0,0.9), 0px 0px 4px rgba(0,0,0,1)',
-                      whiteSpace: 'pre',
+                      // ── FIX: wrap long lines instead of overflowing ──
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'break-word',
                     }}
                   >
                     {line || '\u00A0'}

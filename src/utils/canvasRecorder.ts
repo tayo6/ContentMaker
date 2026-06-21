@@ -2,12 +2,32 @@ import { AspectRatio, AudioConfig, TextOverlay } from '../types';
 
 const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
+/** Wrap a string into lines that fit within maxWidth on the given canvas context */
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const test = current ? `${current} ${word}` : word;
+    if (ctx.measureText(test).width <= maxWidth) {
+      current = test;
+    } else {
+      if (current) lines.push(current);
+      // If a single word is too long, force it on its own line
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
 export const renderAndDownloadVideo = async (
   videoUrl: string,
   aspectRatio: AspectRatio,
   textOverlay: TextOverlay,
   audioConfig: AudioConfig,
-  format: 'mp4' | 'mov',
+  _format: 'mp4' | 'webm',
   onProgress: (progress: number) => void
 ): Promise<{ url: string; ext: string }> => {
   return new Promise((resolve, reject) => {
@@ -38,7 +58,6 @@ export const renderAndDownloadVideo = async (
       canvas.height = height;
       const ctx = canvas.getContext('2d')!;
 
-      // Must be in DOM on mobile for play() to work
       const video = document.createElement('video');
       video.crossOrigin = 'anonymous';
       video.src = `/api/proxy?url=${encodeURIComponent(videoUrl)}`;
@@ -63,7 +82,6 @@ export const renderAndDownloadVideo = async (
       };
 
       video.onloadedmetadata = () => {
-        // Best supported codec — vp9 > vp8 > webm > mp4
         const options: MediaRecorderOptions = {};
         const codecs = [
           'video/webm;codecs=vp9,opus',
@@ -104,7 +122,7 @@ export const renderAndDownloadVideo = async (
           const mime = recorder.mimeType || options.mimeType || 'video/webm';
           const blob = new Blob(chunks, { type: mime });
           const url = URL.createObjectURL(blob);
-          const ext = mime.includes('mp4') ? (format === 'mov' ? 'mov' : 'mp4') : 'webm';
+          const ext = mime.includes('mp4') ? 'mp4' : 'webm';
           resolve({ url, ext });
         };
 
@@ -113,14 +131,13 @@ export const renderAndDownloadVideo = async (
 
         const drawFrame = () => {
           if (video.ended || video.paused) return;
-
           ctx.clearRect(0, 0, width, height);
 
           const vw = video.videoWidth;
           const vh = video.videoHeight;
 
           if (vw > 0 && vh > 0) {
-            // object-fit: cover — fill canvas, crop excess from centre
+            // object-fit: cover
             const scale = Math.max(width / vw, height / vh);
             const srcW = width  / scale;
             const srcH = height / scale;
@@ -129,7 +146,7 @@ export const renderAndDownloadVideo = async (
             ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, width, height);
           }
 
-          // Text overlay
+          // ── Text overlay with word-wrap ──
           if (textOverlay.text) {
             const fontSize = Math.floor(textOverlay.size * (height / 800));
             ctx.save();
@@ -142,15 +159,31 @@ export const renderAndDownloadVideo = async (
             ctx.shadowOffsetX = 2;
             ctx.shadowOffsetY = 2;
 
-            let textY = height / 2;
-            if (textOverlay.position === 'top')    textY = height * 0.12;
-            if (textOverlay.position === 'bottom')  textY = height * 0.82;
+            // 88% of canvas width as the wrap boundary (leaves 6% margin each side)
+            const maxTextWidth = width * 0.88;
 
-            const lines = textOverlay.text.split('\n');
-            lines.forEach((line, i) => {
-              const offset = (i - (lines.length - 1) / 2) * fontSize * 1.2;
-              ctx.fillText(line, width / 2, textY + offset);
+            // Each \n in the textarea is an explicit line break;
+            // within each segment, auto-wrap long words
+            const inputLines = textOverlay.text.split('\n');
+            const allLines: string[] = [];
+            for (const seg of inputLines) {
+              const wrapped = wrapText(ctx, seg, maxTextWidth);
+              allLines.push(...wrapped);
+            }
+
+            let baseY = height / 2;
+            if (textOverlay.position === 'top')    baseY = height * 0.12;
+            if (textOverlay.position === 'bottom')  baseY = height * 0.82;
+
+            const lineH = fontSize * 1.25;
+            const totalH = lineH * allLines.length;
+            // Shift block up so it's centred on baseY
+            const startY = baseY - totalH / 2 + lineH / 2;
+
+            allLines.forEach((line, i) => {
+              ctx.fillText(line, width / 2, startY + i * lineH, maxTextWidth);
             });
+
             ctx.restore();
           }
 
