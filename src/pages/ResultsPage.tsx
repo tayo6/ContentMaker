@@ -26,12 +26,12 @@ export default function ResultsPage({
     <div className="pt-8 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        <div className="flex items-center justify-between mb-6">
-           <button onClick={onBack} className="flex items-center text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-200 bg-white px-4 py-2 rounded-md shadow-sm">
-             <ArrowLeft className="w-4 h-4 mr-2" /> Back to Search
+        <div className="relative flex items-center justify-between mb-6">
+           <button onClick={onBack} title="Back" className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
+             <ArrowLeft className="w-5 h-5" />
            </button>
-           <h1 className="text-xl font-bold text-gray-900">1. Select Video</h1>
-           <div className="w-24 border-transparent border px-4 py-2" />
+           <h1 className="text-xl font-bold text-gray-900 absolute left-1/2 -translate-x-1/2">1. Select Video</h1>
+           <div className="w-[36px]" />
         </div>
 
         {/* Refined Mini Search Bar */}

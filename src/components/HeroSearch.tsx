@@ -19,11 +19,11 @@ export default function HeroSearch({ onSearch, initialQuery = '' }: HeroSearchPr
   return (
     <div className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 px-4 sm:px-6 lg:px-8 bg-gray-50 flex flex-col items-center justify-center border-b border-gray-200">
       <div className="relative z-10 max-w-3xl w-full text-center">
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 tracking-tight mb-6">
-          Find the perfect stock video.
+        <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-gray-900 tracking-tight mb-6">
+          Find tag-relevant videos for your socials.
         </h1>
         <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto font-medium">
-          Search thousands of high-quality clips for your next project.
+          Great for social media managers, artists, and online content makers. Get access to thousands of high-quality videos suitable for IG, TikTok, Twitter/X, and YouTube.
         </p>
 
         <form onSubmit={handleSubmit} className="relative max-w-2xl mx-auto flex items-center">

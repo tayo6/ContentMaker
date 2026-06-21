@@ -88,7 +88,26 @@ export default function App() {
       
       <main className="pt-16 pb-24">
         {step === 'search' && (
-           <HeroSearch onSearch={handleHeroSearch} initialQuery="" />
+           <>
+             <HeroSearch onSearch={handleHeroSearch} initialQuery="" />
+             
+             <div className="max-w-3xl mx-auto mt-12 px-4 sm:px-6 lg:px-8 pb-12">
+                <div className="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 shadow-sm text-center">
+                   <h2 className="text-xl font-bold text-gray-900 mb-2">Stream TJay KARTEL</h2>
+                   <p className="text-gray-600 mb-6 font-medium">Discover and stream the latest tracks from TJay KARTEL on Spotify.</p>
+                   <iframe 
+                     style={{ borderRadius: '12px' }} 
+                     src="https://open.spotify.com/embed/artist/6CoP3rHhCUvgx8xFyg2b5X?utm_source=generator" 
+                     width="100%" 
+                     height="352" 
+                     frameBorder="0" 
+                     allowFullScreen={true} 
+                     allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+                     loading="lazy"
+                   ></iframe>
+                </div>
+             </div>
+           </>
         )}
 
         {step === 'results' && (
@@ -151,7 +170,7 @@ export default function App() {
       {step === 'search' && (
         <footer className="border-t border-gray-200 py-12 text-center text-gray-500 bg-white">
           <p className="font-medium">&copy; {new Date().getFullYear()} Contentmaker. All rights reserved.</p>
-          <p className="mt-2 text-sm">Developed by Tayo</p>
+          <p className="mt-2 text-sm">Developed by Adeniran Tayo</p>
         </footer>
       )}
     </div>

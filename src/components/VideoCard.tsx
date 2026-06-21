@@ -95,8 +95,15 @@ export default function VideoCard({ video, onClick }: VideoCardProps) {
       </div>
 
       {/* Source Badge */}
-      <div className="absolute top-2 left-2 bg-white/90 text-gray-900 shadow-sm backdrop-blur-md rounded-sm px-2 py-1 flex items-center gap-1">
-         <span className="text-[10px] font-bold uppercase tracking-wider">{video.source}</span>
+      <div 
+        className="absolute top-3 left-3 shadow-sm z-10"
+        title={`Source: ${video.source}`}
+      >
+        <div className={`w-3.5 h-3.5 rounded-full border border-white shadow-sm ${
+          video.source.toLowerCase() === 'pixabay' ? 'bg-blue-500' : 
+          video.source.toLowerCase() === 'pexels' ? 'bg-green-500' : 
+          'bg-gray-500'
+        }`} />
       </div>
     </motion.div>
   );
