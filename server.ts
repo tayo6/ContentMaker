@@ -48,16 +48,18 @@ async function startServer() {
       const q = req.query.query as string || 'landscape';
       const page = req.query.page as string || '1';
 
+      let pexelsResults: any[] = [];
+      let pixabayResults: any[] = [];
+
       try {
         const pexelsKey = process.env.PEXELS_API_KEY || 'dWsAqCjhFG3p7M2ch3nK3XasHEKjcR7d1fKvOhw6vjLxp1VRFokHQyCG';
-        const pexelsRes = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=12&page=${page}`, {
+        const pexelsRes = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=6&page=${page}`, {
           headers: { 'Authorization': pexelsKey }
         });
         const data = await pexelsRes.json();
         
-        let results: any[] = [];
         if (data.videos) {
-          results = data.videos.map((v: any) => ({
+          pexelsResults = data.videos.map((v: any) => ({
             id: String(v.id),
             source: 'pexels',
             url: v.url,
@@ -69,11 +71,47 @@ async function startServer() {
             user: { name: v.user.name, url: v.user.url }
           }));
         }
-        res.json({ results });
       } catch (e) { 
-        console.error('API Error', e); 
-        res.status(500).json({ error: 'Failed to fetch videos' });
+        console.error('Pexels API Error', e); 
       }
+
+      try {
+        const pixabayKey = process.env.PIXABAY_API_KEY || '43640236-47b2ae60b618cf61eacdeec7e'; // Fallback to public demo key if available
+        if (pixabayKey) {
+          const pixabayRes = await fetch(`https://pixabay.com/api/videos/?key=${pixabayKey}&q=${encodeURIComponent(q)}&page=${page}&per_page=6`);
+          const data = await pixabayRes.json();
+          
+          if (data.hits) {
+            pixabayResults = data.hits.map((v: any) => ({
+              id: String(v.id),
+              source: 'pixabay',
+              url: v.pageURL,
+              image: `https://i.vimeocdn.com/video/${v.picture_id}_640x360.jpg`,
+              duration: v.duration,
+              width: v.videos.medium?.width || v.videos.large?.width || 0,
+              height: v.videos.medium?.height || v.videos.large?.height || 0,
+              video_files: [
+                ...(v.videos.large?.url ? [{ link: v.videos.large.url, quality: 'hd' }] : []),
+                ...(v.videos.medium?.url ? [{ link: v.videos.medium.url, quality: 'sd' }] : []),
+                ...(v.videos.small?.url ? [{ link: v.videos.small.url, quality: 'sd' }] : [])
+              ],
+              user: { name: v.user, url: `https://pixabay.com/users/${v.user}-${v.user_id}/` }
+            }));
+          }
+        }
+      } catch (e) { 
+        console.error('Pixabay API Error', e); 
+      }
+
+      // Mix the results together
+      const results = [];
+      const maxLen = Math.max(pexelsResults.length, pixabayResults.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (pexelsResults[i]) results.push(pexelsResults[i]);
+        if (pixabayResults[i]) results.push(pixabayResults[i]);
+      }
+
+      res.json({ results });
     } catch (e) {
       console.error(e);
       res.status(500).json({ error: 'Failed to fetch videos' });

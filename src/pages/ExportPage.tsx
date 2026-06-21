@@ -42,17 +42,6 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
     }
   };
 
-  const handleManualDownload = () => {
-    if (!generatedUrl) return;
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = generatedUrl;
-    a.download = `contentmaker-video-${Date.now()}.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  };
-
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mx-auto mb-8">
@@ -116,12 +105,15 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
                  <video src={generatedUrl} controls className="w-full rounded shadow-sm border border-black/10 mx-auto mb-4 bg-black" />
                  
                  <div className="flex gap-4">
-                   <button 
-                     onClick={handleManualDownload}
+                   <a 
+                     href={generatedUrl}
+                     download={`contentmaker-video-${Date.now()}.${format}`}
+                     target="_blank"
+                     rel="noopener noreferrer"
                      className="flex-1 flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 transition"
                    >
                      <Download className="w-4 h-4 mr-2" /> Download Video
-                   </button>
+                   </a>
                    <button 
                      onClick={() => setGeneratedUrl(null)}
                      className="flex items-center justify-center px-4 py-3 bg-white text-gray-700 border border-gray-300 rounded-md font-bold hover:bg-gray-50 transition"
