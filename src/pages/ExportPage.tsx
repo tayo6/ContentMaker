@@ -22,6 +22,21 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
 
   const handleExport = async () => {
     if (!bestVideo) return;
+    
+    // If no text and no custom audio, skip canvas recording — just download directly
+    const needsRendering = !!textOverlay.text || !!audioConfig.url;
+    
+    if (!needsRendering) {
+      const filename = `contentmaker-video-${Date.now()}.${format}`;
+      const a = document.createElement('a');
+      a.href = `/api/download?url=${encodeURIComponent(bestVideo.link)}&filename=${filename}`;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
     setIsExporting(true);
     setProgress(0);
     setGeneratedUrl(null);
@@ -38,7 +53,7 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
       setFileExt(ext);
     } catch (err) {
       console.error(err);
-      alert('Failed to export video. Certain video files may restrict external canvas rendering due to CORS.');
+      alert('Export failed. Try a shorter video or switch to desktop for long videos.');
     } finally {
       setIsExporting(false);
     }

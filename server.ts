@@ -42,6 +42,32 @@ async function startServer() {
     }
   });
 
+  // API endpoint for direct video download
+  app.get('/api/download', async (req, res) => {
+    try {
+      const url = req.query.url as string;
+      const filename = (req.query.filename as string) || 'video.mp4';
+      if (!url) return res.status(400).send('Missing URL');
+
+      const fetchRes = await fetch(url, { redirect: 'follow' });
+      res.status(200);
+      res.setHeader('Content-Type', fetchRes.headers.get('content-type') || 'video/mp4');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      
+      const contentLength = fetchRes.headers.get('content-length');
+      if (contentLength) res.setHeader('Content-Length', contentLength);
+
+      const { Readable } = await import('stream');
+      if (!fetchRes.body) return res.end();
+      const readable = Readable.fromWeb(fetchRes.body as any);
+      readable.pipe(res);
+    } catch (e) {
+      console.error('Download proxy error', e);
+      res.status(500).send('Download error');
+    }
+  });
+
   // API endpoints for fetching videos
   app.get('/api/videos', async (req, res) => {
     try {
@@ -86,7 +112,7 @@ async function startServer() {
               id: String(v.id),
               source: 'pixabay',
               url: v.pageURL,
-              image: `https://i.vimeocdn.com/video/${v.picture_id}_640x360.jpg`,
+              image: v.videos.medium?.thumbnail || v.videos.large?.thumbnail || v.videos.small?.thumbnail || '',
               duration: v.duration,
               width: v.videos.medium?.width || v.videos.large?.width || 0,
               height: v.videos.medium?.height || v.videos.large?.height || 0,

@@ -13,8 +13,11 @@ export default function VideoCard({ video, onClick }: VideoCardProps) {
   const [isMuted, setIsMuted] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // We find a medium quality video for hover preview to save bandwidth
-  const previewVideoInfo = video.video_files.find(f => f.quality === 'hd') || video.video_files.find(f => f.quality === 'sd') || video.video_files[0];
+  // We find a medium quality video for hover preview to save bandwidth, proxy it
+  const rawPreview = video.video_files.find(f => f.quality === 'sd') || video.video_files.find(f => f.quality === 'hd') || video.video_files[0];
+  const previewVideoInfo = rawPreview
+    ? { ...rawPreview, link: `/api/proxy?url=${encodeURIComponent(rawPreview.link)}` }
+    : null;
 
   const handleMouseEnter = () => {
     setIsHovered(true);
