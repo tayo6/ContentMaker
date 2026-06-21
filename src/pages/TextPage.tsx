@@ -16,23 +16,29 @@ export default function TextPage({ video, aspectRatio, textOverlay, setTextOverl
   const videoRef = useRef<HTMLVideoElement>(null);
   const bestVideo = video.video_files.find(f => f.quality === 'hd') || video.video_files[0];
 
-  // ── FIXED: aspect ratio classes that never shrink the preview ──
-  // The container is fixed at h-[600px]. We constrain the preview box
-  // purely by aspect-ratio + max dimensions so it fills the space stably.
-  const aspectClasses: Record<AspectRatio, string> = {
-    '9:16': 'h-full max-h-[560px] aspect-[9/16]',
-    '3:4':  'h-full max-h-[560px] aspect-[3/4]',
-    '1:1':  'h-full max-h-[560px] aspect-square',
-    '4:3':  'w-full max-w-full aspect-[4/3]',
-    '16:9': 'w-full max-w-full aspect-[16/9]',
+  const ratioMap: Record<AspectRatio, number> = {
+    '9:16': 9 / 16,
+    '3:4':  3 / 4,
+    '1:1':  1,
+    '4:3':  4 / 3,
+    '16:9': 16 / 9,
   };
 
+  const CONTAINER_H = 560;
+  const ratio = ratioMap[aspectRatio];
+  const boxW = Math.min(CONTAINER_H * ratio, 800);
+  const boxH = boxW / ratio;
+
+  // Scale font size relative to the preview box height (canvas records at 800px reference)
+  const previewFontSize = Math.floor(textOverlay.size * (boxH / 800));
+
   const getPositionStyle = (): React.CSSProperties => {
+    // All positions use top/transform so the div never pushes outside the box
     switch (textOverlay.position) {
-      case 'top':    return { top: '15%', transform: 'none' };
-      case 'bottom': return { bottom: '15%', top: 'auto', transform: 'none' };
+      case 'top':    return { top: '12%',  transform: 'translateY(0)' };
+      case 'bottom': return { top: '80%',  transform: 'translateY(-50%)' };
       case 'middle':
-      default:       return { top: '50%', transform: 'translateY(-50%)' };
+      default:       return { top: '50%',  transform: 'translateY(-50%)' };
     }
   };
 
@@ -50,14 +56,15 @@ export default function TextPage({ video, aspectRatio, textOverlay, setTextOverl
 
       <div className="flex flex-col lg:flex-row gap-8">
 
-        {/* ── Preview Pane ── fixed height, never collapses ── */}
-        <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg p-4 sm:p-8 flex items-center justify-center overflow-hidden"
-             style={{ height: '600px', minHeight: '600px' }}>
-
-          {/* The aspect-ratio box: sized by CSS, never by its children */}
-          <div className={`relative bg-black rounded-lg overflow-hidden shadow-xl mx-auto ${aspectClasses[aspectRatio]}`}
-               style={{ flexShrink: 0 }}>
-
+        {/* Preview — same sizing logic as ResizePage */}
+        <div
+          className="flex-1 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center overflow-hidden"
+          style={{ height: `${CONTAINER_H + 40}px` }}
+        >
+          <div
+            className="relative bg-black rounded-lg shadow-xl"
+            style={{ width: `${boxW}px`, height: `${boxH}px`, maxWidth: '100%', overflow: 'hidden', flexShrink: 0 }}
+          >
             <video
               ref={videoRef}
               src={`/api/proxy?url=${encodeURIComponent(bestVideo.link)}`}
@@ -69,20 +76,29 @@ export default function TextPage({ video, aspectRatio, textOverlay, setTextOverl
               className="absolute inset-0 w-full h-full object-cover pointer-events-none"
             />
 
-            {/* Text overlay: absolutely positioned, does NOT affect the box size */}
+            {/* Text overlay — always visible, never pushes layout */}
             {textOverlay.text && (
               <div
-                className="absolute left-0 right-0 text-center px-6 pointer-events-none z-10"
-                style={{ position: 'absolute', ...getPositionStyle() }}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  textAlign: 'center',
+                  padding: '0 16px',
+                  pointerEvents: 'none',
+                  zIndex: 10,
+                  ...getPositionStyle(),
+                }}
               >
                 {textOverlay.text.split('\n').map((line, i) => (
                   <div
                     key={i}
-                    className="font-bold leading-tight"
                     style={{
                       color: textOverlay.color,
-                      fontSize: `${textOverlay.size}px`,
-                      textShadow: '0px 2px 10px rgba(0,0,0,0.8)',
+                      fontSize: `${previewFontSize}px`,
+                      fontWeight: 'bold',
+                      lineHeight: 1.2,
+                      textShadow: '0px 2px 10px rgba(0,0,0,0.9), 0px 0px 4px rgba(0,0,0,1)',
                       whiteSpace: 'pre',
                     }}
                   >
@@ -94,7 +110,7 @@ export default function TextPage({ video, aspectRatio, textOverlay, setTextOverl
           </div>
         </div>
 
-        {/* ── Tools Pane ── */}
+        {/* Tools */}
         <div className="w-full lg:w-96 bg-white border border-gray-200 rounded-lg p-6 space-y-6 self-start">
           <div>
             <label className="text-sm font-semibold text-gray-900 block mb-2">Text Content</label>
@@ -113,7 +129,9 @@ export default function TextPage({ video, aspectRatio, textOverlay, setTextOverl
                 <button
                   key={c}
                   onClick={() => setTextOverlay(p => ({ ...p, color: c }))}
-                  className={`w-10 h-10 rounded-full border border-gray-200 shadow-sm transition-transform ${textOverlay.color === c ? 'ring-2 ring-blue-500 ring-offset-2 scale-110' : 'hover:scale-105'}`}
+                  className={`w-10 h-10 rounded-full border border-gray-200 shadow-sm transition-transform ${
+                    textOverlay.color === c ? 'ring-2 ring-blue-500 ring-offset-2 scale-110' : 'hover:scale-105'
+                  }`}
                   style={{ backgroundColor: c }}
                 />
               ))}
@@ -142,7 +160,11 @@ export default function TextPage({ video, aspectRatio, textOverlay, setTextOverl
                 <button
                   key={pos}
                   onClick={() => setTextOverlay(p => ({ ...p, position: pos }))}
-                  className={`flex-1 py-2 text-sm font-medium rounded capitalize transition-colors ${textOverlay.position === pos ? 'bg-white shadow border border-gray-200 text-blue-600' : 'text-gray-600 hover:text-gray-900'}`}
+                  className={`flex-1 py-2 text-sm font-medium rounded capitalize transition-colors ${
+                    textOverlay.position === pos
+                      ? 'bg-white shadow border border-gray-200 text-blue-600'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
                 >
                   {pos}
                 </button>

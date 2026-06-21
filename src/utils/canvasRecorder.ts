@@ -16,11 +16,11 @@ export const renderAndDownloadVideo = async (
 
       const dims: Record<AspectRatio, { width: number; height: number }> = mobile
         ? {
-            '9:16': { width: 360, height: 640 },
-            '1:1':  { width: 480, height: 480 },
-            '16:9': { width: 640, height: 360 },
-            '3:4':  { width: 480, height: 640 },
-            '4:3':  { width: 640, height: 480 },
+            '9:16': { width: 360,  height: 640  },
+            '1:1':  { width: 480,  height: 480  },
+            '16:9': { width: 640,  height: 360  },
+            '3:4':  { width: 480,  height: 640  },
+            '4:3':  { width: 640,  height: 480  },
           }
         : {
             '9:16': { width: 720,  height: 1280 },
@@ -38,12 +38,12 @@ export const renderAndDownloadVideo = async (
       canvas.height = height;
       const ctx = canvas.getContext('2d')!;
 
+      // Must be in DOM on mobile for play() to work
       const video = document.createElement('video');
       video.crossOrigin = 'anonymous';
       video.src = `/api/proxy?url=${encodeURIComponent(videoUrl)}`;
       video.muted = true;
       video.playsInline = true;
-      // Must be in DOM on mobile to allow play()
       video.style.cssText = 'position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;top:0;left:0;';
       document.body.appendChild(video);
 
@@ -58,12 +58,12 @@ export const renderAndDownloadVideo = async (
       }
 
       const cleanup = () => {
-        if (document.body.contains(video)) document.body.removeChild(video);
-        audioCtx?.close();
+        try { if (document.body.contains(video)) document.body.removeChild(video); } catch (_) {}
+        try { audioCtx?.close(); } catch (_) {}
       };
 
       video.onloadedmetadata = () => {
-        // ── Codec selection: prefer vp9 (better quality than vp8) then fall back ──
+        // Best supported codec — vp9 > vp8 > webm > mp4
         const options: MediaRecorderOptions = {};
         const codecs = [
           'video/webm;codecs=vp9,opus',
@@ -74,16 +74,12 @@ export const renderAndDownloadVideo = async (
           'video/mp4',
         ];
         for (const c of codecs) {
-          if (MediaRecorder.isTypeSupported(c)) {
-            options.mimeType = c;
-            break;
-          }
+          if (MediaRecorder.isTypeSupported(c)) { options.mimeType = c; break; }
         }
-        // Higher bitrate = better quality. Mobile uses 3Mbps (was 1.5), desktop 8Mbps (was 5)
         options.videoBitsPerSecond = mobile ? 3_000_000 : 8_000_000;
 
         // @ts-ignore
-        const canvasStream = canvas.captureStream(fps);
+        const canvasStream: MediaStream = canvas.captureStream(fps);
         let finalStream = canvasStream;
 
         if (customAudioElement) {
@@ -95,9 +91,7 @@ export const renderAndDownloadVideo = async (
             if (audioTracks.length > 0) {
               finalStream = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
             }
-          } catch (e) {
-            console.error('Audio init failed', e);
-          }
+          } catch (e) { console.error('Audio init failed', e); }
         }
 
         const recorder = new MediaRecorder(finalStream, options);
@@ -106,14 +100,10 @@ export const renderAndDownloadVideo = async (
 
         recorder.onstop = () => {
           cleanup();
-          if (chunks.length === 0) {
-            reject(new Error('No video data captured.'));
-            return;
-          }
+          if (chunks.length === 0) { reject(new Error('No video data captured.')); return; }
           const mime = recorder.mimeType || options.mimeType || 'video/webm';
           const blob = new Blob(chunks, { type: mime });
           const url = URL.createObjectURL(blob);
-          // Always label .webm honestly — the container IS webm from MediaRecorder
           const ext = mime.includes('mp4') ? (format === 'mov' ? 'mov' : 'mp4') : 'webm';
           resolve({ url, ext });
         };
@@ -123,48 +113,45 @@ export const renderAndDownloadVideo = async (
 
         const drawFrame = () => {
           if (video.ended || video.paused) return;
+
           ctx.clearRect(0, 0, width, height);
 
           const vw = video.videoWidth;
           const vh = video.videoHeight;
 
           if (vw > 0 && vh > 0) {
-            // ── FIXED: correct object-fit:cover math ──
-            // Scale so the video FILLS the canvas (cover), then crop the overflow centrally.
+            // object-fit: cover — fill canvas, crop excess from centre
             const scale = Math.max(width / vw, height / vh);
-            const scaledW = vw * scale;   // how wide the scaled video would be
-            const scaledH = vh * scale;   // how tall the scaled video would be
-
-            // How much source pixels to skip on each side to centre-crop
-            const srcX = (vw - width  / scale) / 2;
-            const srcY = (vh - height / scale) / 2;
             const srcW = width  / scale;
             const srcH = height / scale;
-
+            const srcX = (vw - srcW) / 2;
+            const srcY = (vh - srcH) / 2;
             ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, width, height);
           }
 
-          // ── Text overlay ──
+          // Text overlay
           if (textOverlay.text) {
             const fontSize = Math.floor(textOverlay.size * (height / 800));
-            ctx.font = `bold ${fontSize}px Inter, sans-serif`;
+            ctx.save();
+            ctx.font = `bold ${fontSize}px Inter, Arial, sans-serif`;
             ctx.fillStyle = textOverlay.color;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.shadowColor = 'rgba(0,0,0,0.8)';
-            ctx.shadowBlur = Math.max(10, fontSize * 0.15);
+            ctx.shadowColor = 'rgba(0,0,0,0.9)';
+            ctx.shadowBlur = Math.max(8, fontSize * 0.2);
             ctx.shadowOffsetX = 2;
             ctx.shadowOffsetY = 2;
 
             let textY = height / 2;
-            if (textOverlay.position === 'top') textY = height * 0.15;
-            if (textOverlay.position === 'bottom') textY = height * 0.85;
+            if (textOverlay.position === 'top')    textY = height * 0.12;
+            if (textOverlay.position === 'bottom')  textY = height * 0.82;
 
             const lines = textOverlay.text.split('\n');
             lines.forEach((line, i) => {
               const offset = (i - (lines.length - 1) / 2) * fontSize * 1.2;
               ctx.fillText(line, width / 2, textY + offset);
             });
+            ctx.restore();
           }
 
           onProgress(Math.min((video.currentTime / video.duration) * 100, 100));
@@ -172,10 +159,7 @@ export const renderAndDownloadVideo = async (
         };
 
         video.onplay = () => {
-          if (!recording) {
-            recorder.start(500);
-            recording = true;
-          }
+          if (!recording) { recorder.start(500); recording = true; }
           if (customAudioElement?.paused) {
             audioCtx?.resume();
             customAudioElement.play().catch(console.error);
@@ -189,10 +173,7 @@ export const renderAndDownloadVideo = async (
           if (recording) recorder.stop();
         };
 
-        video.onerror = () => {
-          cleanup();
-          reject(new Error('Failed to load video for recording.'));
-        };
+        video.onerror = () => { cleanup(); reject(new Error('Failed to load video.')); };
 
         const tryPlay = async () => {
           try {
@@ -203,10 +184,7 @@ export const renderAndDownloadVideo = async (
               });
             }
             await video.play();
-          } catch (e) {
-            cleanup();
-            reject(e);
-          }
+          } catch (e) { cleanup(); reject(e); }
         };
 
         tryPlay();
