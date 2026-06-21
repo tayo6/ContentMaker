@@ -7,7 +7,7 @@ export const renderAndDownloadVideo = async (
   audioConfig: AudioConfig,
   format: 'mp4' | 'mov',
   onProgress: (progress: number) => void
-): Promise<string> => {
+): Promise<{ url: string; ext: string }> => {
   return new Promise((resolve, reject) => {
     try {
       const dimensions = {
@@ -88,10 +88,15 @@ export const renderAndDownloadVideo = async (
         };
 
         recorder.onstop = () => {
-          const finalMime = options.mimeType || 'video/mp4';
-          const blob = new Blob(chunks, { type: finalMime });
+          if (chunks.length === 0) {
+            reject(new Error("Recording failed: No video data was captured."));
+            return;
+          }
+          const actualMime = recorder.mimeType || options.mimeType || 'video/mp4';
+          const blob = new Blob(chunks, { type: actualMime });
           const url = URL.createObjectURL(blob);
-          resolve(url);
+          const ext = actualMime.includes('webm') ? 'webm' : (format === 'mov' ? 'mov' : 'mp4');
+          resolve({ url, ext });
         };
 
         let isRecording = false;

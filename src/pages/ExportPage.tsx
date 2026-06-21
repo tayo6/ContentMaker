@@ -13,6 +13,7 @@ interface ExportPageProps {
 
 export default function ExportPage({ video, aspectRatio, textOverlay, audioConfig, onBack }: ExportPageProps) {
   const [format, setFormat] = useState<'mp4' | 'mov'>('mp4');
+  const [fileExt, setFileExt] = useState<string>('mp4');
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
@@ -25,7 +26,7 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
     setProgress(0);
     setGeneratedUrl(null);
     try {
-      const url = await renderAndDownloadVideo(
+      const { url, ext } = await renderAndDownloadVideo(
         bestVideo.link,
         aspectRatio,
         textOverlay,
@@ -34,6 +35,7 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
         (p) => setProgress(p)
       );
       setGeneratedUrl(url);
+      setFileExt(ext);
     } catch (err) {
       console.error(err);
       alert('Failed to export video. Certain video files may restrict external canvas rendering due to CORS.');
@@ -107,9 +109,7 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
                  <div className="flex gap-4">
                    <a 
                      href={generatedUrl}
-                     download={`contentmaker-video-${Date.now()}.${format}`}
-                     target="_blank"
-                     rel="noopener noreferrer"
+                     download={`contentmaker-video-${Date.now()}.${fileExt}`}
                      className="flex-1 flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 transition"
                    >
                      <Download className="w-4 h-4 mr-2" /> Download Video
