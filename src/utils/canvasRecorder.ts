@@ -14,14 +14,21 @@ export const renderAndDownloadVideo = async (
     try {
       const mobile = isMobile();
 
-      // Lower resolution on mobile to prevent tab crash
       const dims: Record<AspectRatio, { width: number; height: number }> = mobile
-        ? { '9:16': { width: 360, height: 640 }, '1:1': { width: 480, height: 480 },
-            '16:9': { width: 640, height: 360 }, '3:4': { width: 480, height: 640 },
-            '4:3': { width: 640, height: 480 } }
-        : { '9:16': { width: 720, height: 1280 }, '1:1': { width: 1080, height: 1080 },
-            '16:9': { width: 1280, height: 720 }, '3:4': { width: 1080, height: 1440 },
-            '4:3': { width: 1440, height: 1080 } };
+        ? {
+            '9:16': { width: 360, height: 640 },
+            '1:1':  { width: 480, height: 480 },
+            '16:9': { width: 640, height: 360 },
+            '3:4':  { width: 480, height: 640 },
+            '4:3':  { width: 640, height: 480 },
+          }
+        : {
+            '9:16': { width: 720,  height: 1280 },
+            '1:1':  { width: 1080, height: 1080 },
+            '16:9': { width: 1280, height: 720  },
+            '3:4':  { width: 1080, height: 1440 },
+            '4:3':  { width: 1440, height: 1080 },
+          };
 
       const { width, height } = dims[aspectRatio];
       const fps = mobile ? 15 : 30;
@@ -36,12 +43,8 @@ export const renderAndDownloadVideo = async (
       video.src = `/api/proxy?url=${encodeURIComponent(videoUrl)}`;
       video.muted = true;
       video.playsInline = true;
-      // Required on mobile — must be attached to DOM to play
-      video.style.position = 'fixed';
-      video.style.opacity = '0';
-      video.style.pointerEvents = 'none';
-      video.style.width = '1px';
-      video.style.height = '1px';
+      // Must be in DOM on mobile to allow play()
+      video.style.cssText = 'position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;top:0;left:0;';
       document.body.appendChild(video);
 
       let customAudioElement: HTMLAudioElement | null = null;
@@ -60,13 +63,24 @@ export const renderAndDownloadVideo = async (
       };
 
       video.onloadedmetadata = () => {
-        // Pick best supported codec
+        // ── Codec selection: prefer vp9 (better quality than vp8) then fall back ──
         const options: MediaRecorderOptions = {};
-        const codecs = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9', 'video/webm', 'video/mp4'];
+        const codecs = [
+          'video/webm;codecs=vp9,opus',
+          'video/webm;codecs=vp8,opus',
+          'video/webm;codecs=vp9',
+          'video/webm;codecs=vp8',
+          'video/webm',
+          'video/mp4',
+        ];
         for (const c of codecs) {
-          if (MediaRecorder.isTypeSupported(c)) { options.mimeType = c; break; }
+          if (MediaRecorder.isTypeSupported(c)) {
+            options.mimeType = c;
+            break;
+          }
         }
-        options.videoBitsPerSecond = mobile ? 1_500_000 : 5_000_000;
+        // Higher bitrate = better quality. Mobile uses 3Mbps (was 1.5), desktop 8Mbps (was 5)
+        options.videoBitsPerSecond = mobile ? 3_000_000 : 8_000_000;
 
         // @ts-ignore
         const canvasStream = canvas.captureStream(fps);
@@ -81,7 +95,9 @@ export const renderAndDownloadVideo = async (
             if (audioTracks.length > 0) {
               finalStream = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
             }
-          } catch (e) { console.error('Audio init failed', e); }
+          } catch (e) {
+            console.error('Audio init failed', e);
+          }
         }
 
         const recorder = new MediaRecorder(finalStream, options);
@@ -90,11 +106,15 @@ export const renderAndDownloadVideo = async (
 
         recorder.onstop = () => {
           cleanup();
-          if (chunks.length === 0) { reject(new Error('No video data captured.')); return; }
+          if (chunks.length === 0) {
+            reject(new Error('No video data captured.'));
+            return;
+          }
           const mime = recorder.mimeType || options.mimeType || 'video/webm';
           const blob = new Blob(chunks, { type: mime });
           const url = URL.createObjectURL(blob);
-          const ext = mime.includes('webm') ? 'webm' : (format === 'mov' ? 'mov' : 'mp4');
+          // Always label .webm honestly — the container IS webm from MediaRecorder
+          const ext = mime.includes('mp4') ? (format === 'mov' ? 'mov' : 'mp4') : 'webm';
           resolve({ url, ext });
         };
 
@@ -105,17 +125,26 @@ export const renderAndDownloadVideo = async (
           if (video.ended || video.paused) return;
           ctx.clearRect(0, 0, width, height);
 
-          // object-fit: cover
-          const vw = video.videoWidth, vh = video.videoHeight;
-          if (vw && vh) {
+          const vw = video.videoWidth;
+          const vh = video.videoHeight;
+
+          if (vw > 0 && vh > 0) {
+            // ── FIXED: correct object-fit:cover math ──
+            // Scale so the video FILLS the canvas (cover), then crop the overflow centrally.
             const scale = Math.max(width / vw, height / vh);
-            const nw = vw * scale, nh = vh * scale;
-            const ox = (nw - width) / 2, oy = (nh - height) / 2;
-            ctx.drawImage(video, -ox / scale * (1 / 1), -oy / scale * (1 / 1),
-              vw - (ox / scale) * 2, vh - (oy / scale) * 2,
-              0, 0, width, height);
+            const scaledW = vw * scale;   // how wide the scaled video would be
+            const scaledH = vh * scale;   // how tall the scaled video would be
+
+            // How much source pixels to skip on each side to centre-crop
+            const srcX = (vw - width  / scale) / 2;
+            const srcY = (vh - height / scale) / 2;
+            const srcW = width  / scale;
+            const srcH = height / scale;
+
+            ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, width, height);
           }
 
+          // ── Text overlay ──
           if (textOverlay.text) {
             const fontSize = Math.floor(textOverlay.size * (height / 800));
             ctx.font = `bold ${fontSize}px Inter, sans-serif`;
@@ -126,11 +155,15 @@ export const renderAndDownloadVideo = async (
             ctx.shadowBlur = Math.max(10, fontSize * 0.15);
             ctx.shadowOffsetX = 2;
             ctx.shadowOffsetY = 2;
+
             let textY = height / 2;
             if (textOverlay.position === 'top') textY = height * 0.15;
             if (textOverlay.position === 'bottom') textY = height * 0.85;
-            textOverlay.text.split('\n').forEach((line, i, arr) => {
-              ctx.fillText(line, width / 2, textY + (i - (arr.length - 1) / 2) * fontSize * 1.2);
+
+            const lines = textOverlay.text.split('\n');
+            lines.forEach((line, i) => {
+              const offset = (i - (lines.length - 1) / 2) * fontSize * 1.2;
+              ctx.fillText(line, width / 2, textY + offset);
             });
           }
 
@@ -139,7 +172,10 @@ export const renderAndDownloadVideo = async (
         };
 
         video.onplay = () => {
-          if (!recording) { recorder.start(500); recording = true; }
+          if (!recording) {
+            recorder.start(500);
+            recording = true;
+          }
           if (customAudioElement?.paused) {
             audioCtx?.resume();
             customAudioElement.play().catch(console.error);
@@ -153,7 +189,10 @@ export const renderAndDownloadVideo = async (
           if (recording) recorder.stop();
         };
 
-        video.onerror = () => { cleanup(); reject(new Error('Failed to load video.')); };
+        video.onerror = () => {
+          cleanup();
+          reject(new Error('Failed to load video for recording.'));
+        };
 
         const tryPlay = async () => {
           try {
@@ -164,7 +203,10 @@ export const renderAndDownloadVideo = async (
               });
             }
             await video.play();
-          } catch (e) { cleanup(); reject(e); }
+          } catch (e) {
+            cleanup();
+            reject(e);
+          }
         };
 
         tryPlay();
