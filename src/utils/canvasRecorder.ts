@@ -25,7 +25,7 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
 export const renderAndDownloadVideo = async (
   videoUrl: string,
   aspectRatio: AspectRatio,
-  textOverlay: TextOverlay,
+  textOverlays: TextOverlay[],
   audioConfig: AudioConfig,
   _format: 'mp4' | 'webm',
   onProgress: (progress: number) => void
@@ -147,11 +147,12 @@ export const renderAndDownloadVideo = async (
           }
 
           // ── Text overlay with word-wrap ──
-          if (textOverlay.text) {
-            const fontSize = Math.floor(textOverlay.size * (height / 800));
+          textOverlays.forEach((overlay) => {
+            if (!overlay.text) return;
+            const fontSize = Math.floor(overlay.size * (height / 800));
             ctx.save();
             ctx.font = `bold ${fontSize}px Inter, Arial, sans-serif`;
-            ctx.fillStyle = textOverlay.color;
+            ctx.fillStyle = overlay.color;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.shadowColor = 'rgba(0,0,0,0.9)';
@@ -164,7 +165,7 @@ export const renderAndDownloadVideo = async (
 
             // Each \n in the textarea is an explicit line break;
             // within each segment, auto-wrap long words
-            const inputLines = textOverlay.text.split('\n');
+            const inputLines = overlay.text.split('\n');
             const allLines: string[] = [];
             for (const seg of inputLines) {
               const wrapped = wrapText(ctx, seg, maxTextWidth);
@@ -172,8 +173,8 @@ export const renderAndDownloadVideo = async (
             }
 
             let baseY = height / 2;
-            if (textOverlay.position === 'top')    baseY = height * 0.12;
-            if (textOverlay.position === 'bottom')  baseY = height * 0.82;
+            if (overlay.position === 'top')    baseY = height * 0.12;
+            if (overlay.position === 'bottom')  baseY = height * 0.82;
 
             const lineH = fontSize * 1.25;
             const totalH = lineH * allLines.length;
@@ -185,7 +186,7 @@ export const renderAndDownloadVideo = async (
             });
 
             ctx.restore();
-          }
+          });
 
           onProgress(Math.min((video.currentTime / video.duration) * 100, 100));
           animId = requestAnimationFrame(drawFrame);

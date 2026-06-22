@@ -1,20 +1,19 @@
 import { useState, useRef } from 'react';
-import { ArrowLeft, Download, Film, Loader2 } from 'lucide-react';
+import { ArrowLeft, Download, Film, Loader2, CheckCircle2 } from 'lucide-react';
 import { AspectRatio, AudioConfig, TextOverlay, VideoInfo } from '../types';
 import { renderAndDownloadVideo } from '../utils/canvasRecorder';
 
 interface ExportPageProps {
   video: VideoInfo;
   aspectRatio: AspectRatio;
-  textOverlay: TextOverlay;
+  textOverlays: TextOverlay[];
   audioConfig: AudioConfig;
   onBack: () => void;
 }
 
-// Only two honest formats: mp4 (direct download) or webm (canvas-rendered)
 type DownloadFormat = 'mp4' | 'webm';
 
-export default function ExportPage({ video, aspectRatio, textOverlay, audioConfig, onBack }: ExportPageProps) {
+export default function ExportPage({ video, aspectRatio, textOverlays, audioConfig, onBack }: ExportPageProps) {
   const [format, setFormat] = useState<DownloadFormat>('mp4');
   const [fileExt, setFileExt] = useState<string>('webm');
   const [isExporting, setIsExporting] = useState(false);
@@ -25,14 +24,13 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
   const anchorRef = useRef<HTMLAnchorElement>(null);
 
   const bestVideo = video.video_files.find(f => f.quality === 'hd') || video.video_files[0];
-  const needsRendering = !!textOverlay.text || !!audioConfig.url;
+  const needsRendering = textOverlays.some(o => !!o.text) || !!audioConfig.url;
+  const isBusy = isExporting || isDirectDownloading;
 
   const handleExport = async () => {
     if (!bestVideo) return;
     setError(null);
-
     if (!needsRendering) {
-      // Direct proxy download — original quality, no canvas
       setIsDirectDownloading(true);
       try {
         const filename = `contentmaker-video-${Date.now()}.mp4`;
@@ -41,41 +39,21 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
         const blob = await res.blob();
         const objectUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = objectUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        a.href = objectUrl; a.download = filename;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
       } catch (e: any) {
         setError('Download failed: ' + (e?.message || 'Unknown error'));
-      } finally {
-        setIsDirectDownloading(false);
-      }
+      } finally { setIsDirectDownloading(false); }
       return;
     }
-
-    // Canvas render path — always produces webm from MediaRecorder
-    setIsExporting(true);
-    setProgress(0);
-    setGeneratedUrl(null);
+    setIsExporting(true); setProgress(0); setGeneratedUrl(null);
     try {
-      const { url, ext } = await renderAndDownloadVideo(
-        bestVideo.link,
-        aspectRatio,
-        textOverlay,
-        audioConfig,
-        'mp4', // hint only; actual container determined by browser codec support
-        (p) => setProgress(p)
-      );
-      setGeneratedUrl(url);
-      setFileExt(ext);
+      const { url, ext } = await renderAndDownloadVideo(bestVideo.link, aspectRatio, textOverlays, audioConfig, 'mp4', (p) => setProgress(p));
+      setGeneratedUrl(url); setFileExt(ext);
     } catch (err: any) {
-      console.error(err);
       setError('Render failed: ' + (err?.message || 'Try a shorter video.'));
-    } finally {
-      setIsExporting(false);
-    }
+    } finally { setIsExporting(false); }
   };
 
   const handleDownloadBlob = async () => {
@@ -85,11 +63,8 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = `contentmaker-video-${Date.now()}.${fileExt}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      a.href = objectUrl; a.download = `contentmaker-video-${Date.now()}.${fileExt}`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
     } catch {
       if (anchorRef.current) {
@@ -100,108 +75,124 @@ export default function ExportPage({ video, aspectRatio, textOverlay, audioConfi
     }
   };
 
-  const isBusy = isExporting || isDirectDownloading;
-
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-2xl mx-auto px-4 py-8">
       <a ref={anchorRef} style={{ display: 'none' }} />
 
-      <div className="flex items-center justify-between mx-auto mb-8">
-        <button onClick={onBack} disabled={isBusy} className="flex items-center text-sm font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50">
-          <ArrowLeft className="w-4 h-4 mr-2" /> Back
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <button
+          onClick={onBack}
+          disabled={isBusy}
+          className="flex items-center gap-1.5 text-sm font-bold pl-0 pr-3 py-2 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-40"
+          style={{ color: '#111111' }}
+        >
+          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 mr-1">
+            <ArrowLeft className="w-5 h-5" />
+          </div>
+          Back
         </button>
-        <h1 className="text-xl font-bold text-gray-900">5. Export</h1>
-        <div className="w-20" />
+        <div className="flex items-center gap-2">
+          <span style={{ fontWeight: 700, fontSize: '1.25rem', color: '#111111' }}>
+            Export
+          </span>
+        </div>
+        <div style={{ width: 80 }} />
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-8 sm:p-12 shadow-sm text-center">
-        <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Film className="w-10 h-10" />
+      <div className="rounded-[32px] p-10 text-center" style={{ background: '#FFFFFF', border: '1px solid #E9E9E9' }}>
+        {/* Icon */}
+        <div className="flex items-center justify-center mx-auto mb-8"
+          style={{ width: 96, height: 96, borderRadius: '50%', background: '#E9E9E9' }}>
+          <Film className="w-10 h-10" style={{ color: '#111111' }} />
         </div>
 
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Ready to Download</h2>
-        <p className="text-gray-600 max-w-md mx-auto mb-8">
-          {needsRendering
-            ? 'Your video will be rendered with your edits, then saved as .webm (plays on all modern devices).'
-            : 'Your video will be downloaded at original quality as .mp4.'}
-        </p>
+        {!generatedUrl && !isBusy && (
+          <>
+            <h2 style={{ fontWeight: 700, fontSize: '1rem', color: '#111111', marginBottom: '0.75rem' }}>
+              Ready to Download
+            </h2>
+            <p style={{ color: '#767676', fontSize: '0.53125rem', lineHeight: 1.6, maxWidth: 380, margin: '0 auto 2.5rem', fontWeight: 500 }}>
+              {needsRendering
+                ? 'Your edits will be rendered and saved as .webm — plays on all modern devices.'
+                : 'Your video will be downloaded at original quality as .mp4.'}
+            </p>
 
-        {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
-        )}
+            {error && (
+              <div className="mb-5 text-sm font-medium px-4 py-3 rounded-xl text-left" style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B' }}>
+                {error}
+              </div>
+            )}
 
-        {!isBusy && !generatedUrl && (
-          <div className="max-w-sm mx-auto">
-            {/* Format picker only shown for plain downloads (no renders) */}
             {!needsRendering && (
-              <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
-                <button
-                  onClick={() => setFormat('mp4')}
-                  className={`flex-1 py-2 text-sm font-semibold rounded-md transition-colors ${format === 'mp4' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  .MP4
-                </button>
-                <button
-                  onClick={() => setFormat('webm')}
-                  className={`flex-1 py-2 text-sm font-semibold rounded-md transition-colors ${format === 'webm' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  .WebM
-                </button>
+              <div className="flex rounded-3xl overflow-hidden max-w-xs mx-auto mb-6 p-1" style={{ background: '#E9E9E9' }}>
+                {(['mp4', 'webm'] as const).map(f => (
+                  <button key={f} onClick={() => setFormat(f)}
+                    className="flex-1 py-3 text-sm font-bold transition-all rounded-2xl"
+                    style={{
+                      background: format === f ? '#FFFFFF' : 'transparent',
+                      color: '#111111',
+                      border: 'none', cursor: 'pointer', boxShadow: format === f ? '0 2px 8px rgba(0,0,0,0.1)' : 'none',
+                      margin: '2px', fontFamily: '"Inter", sans-serif',
+                    }}>
+                    .{f.toUpperCase()}
+                  </button>
+                ))}
               </div>
             )}
 
             {needsRendering && (
-              <div className="mb-6 bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-blue-700">
-                Edits detected — video will be rendered and saved as <strong>.webm</strong>
+              <div className="mb-6 px-5 py-4 rounded-2xl text-sm font-semibold max-w-xs mx-auto" style={{ background: '#E9E9E9', color: '#111111' }}>
+                Edits detected — will render as <strong>.webm</strong>
               </div>
             )}
 
-            <button
-              onClick={handleExport}
-              className="w-full flex items-center justify-center px-6 py-4 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-sm"
-            >
-              <Download className="w-5 h-5 mr-2" />
+            <button onClick={handleExport}
+              className="inline-flex items-center gap-2 px-8 py-4 text-base font-bold text-white rounded-full transition-colors hover:brightness-95 w-full max-w-xs justify-center"
+              style={{ background: '#E60023', border: 'none', cursor: 'pointer' }}>
+              <Download className="w-5 h-5" />
               {needsRendering ? 'Render & Download' : 'Download Video'}
             </button>
-          </div>
+          </>
         )}
 
         {isDirectDownloading && (
-          <div className="max-w-md mx-auto py-4 flex flex-col items-center gap-4">
-            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-            <p className="text-gray-700 font-medium">Preparing download…</p>
+          <div className="py-6 flex flex-col items-center gap-4">
+            <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#C97B84' }} />
+            <p style={{ color: '#7A7469', fontWeight: 500, margin: 0 }}>Preparing download…</p>
           </div>
         )}
 
         {isExporting && (
-          <div className="max-w-md mx-auto py-4">
-            <p className="text-gray-700 font-medium mb-4">Rendering: {Math.round(progress)}%</p>
-            <div className="h-3 bg-gray-200 rounded-full overflow-hidden w-full">
-              <div className="h-full bg-blue-600 transition-all duration-200" style={{ width: `${progress}%` }} />
+          <div className="py-4 max-w-sm mx-auto">
+            <p style={{ fontWeight: 600, color: '#1A1A1A', marginBottom: '1rem' }}>Rendering {Math.round(progress)}%</p>
+            <div style={{ height: 6, background: '#E8DDD0', borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg, #C97B84, #A85F68)', borderRadius: 99, transition: 'width 0.2s ease' }} />
             </div>
-            <p className="text-sm text-gray-500 mt-4">Do not close this tab while rendering.</p>
+            <p style={{ fontSize: '0.8125rem', color: '#7A7469', marginTop: '0.75rem' }}>Don't close this tab.</p>
           </div>
         )}
 
         {generatedUrl && (
           <div className="max-w-md mx-auto">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-              <h2 className="text-xl font-bold text-green-800 mb-3">Rendered Successfully!</h2>
-              <video src={generatedUrl} controls className="w-full rounded shadow-sm border border-black/10 mb-4 bg-black" />
-              <div className="flex gap-3">
-                <button
-                  onClick={handleDownloadBlob}
-                  className="flex-1 flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 transition"
-                >
-                  <Download className="w-4 h-4 mr-2" /> Save .{fileExt}
-                </button>
-                <button
-                  onClick={() => { setGeneratedUrl(null); setError(null); }}
-                  className="px-4 py-3 bg-white text-gray-700 border border-gray-300 rounded-md font-bold hover:bg-gray-50 transition"
-                >
-                  Redo
-                </button>
-              </div>
+            <div className="flex items-center gap-3 justify-center mb-6">
+              <CheckCircle2 className="w-6 h-6" style={{ color: '#E60023' }} />
+              <span style={{ fontWeight: 700, fontSize: '1.5rem', color: '#111111' }}>
+                Ready to Save
+              </span>
+            </div>
+            <video src={generatedUrl} controls className="w-full mb-8 rounded-[24px]" style={{ background: '#000' }} />
+            <div className="flex flex-col gap-3">
+              <button onClick={handleDownloadBlob}
+                className="w-full flex items-center justify-center gap-2 py-4 text-base font-bold text-white rounded-full transition-colors hover:brightness-95"
+                style={{ background: '#E60023', border: 'none', cursor: 'pointer' }}>
+                <Download className="w-5 h-5" /> Save .{fileExt}
+              </button>
+              <button onClick={() => { setGeneratedUrl(null); setError(null); }}
+                className="w-full py-4 text-base font-bold rounded-full transition-colors hover:bg-gray-200"
+                style={{ background: '#E9E9E9', color: '#111111', border: 'none', cursor: 'pointer' }}>
+                Redo
+              </button>
             </div>
           </div>
         )}

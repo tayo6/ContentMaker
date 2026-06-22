@@ -21,6 +21,7 @@ export interface VideoInfo {
 export type AspectRatio = '9:16' | '1:1' | '16:9' | '3:4' | '4:3';
 
 export interface TextOverlay {
+  id: string;
   text: string;
   color: string;
   size: number;

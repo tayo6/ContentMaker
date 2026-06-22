@@ -9,6 +9,11 @@ async function startServer() {
   // Add JSON body parsing middleware if needed
   app.use(express.json());
 
+  // Health check endpoint for UptimeRobot
+  app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   // Proxy endpoint to bypass CORS and Tainted Canvas issues
   app.get('/api/proxy', async (req, res) => {
     try {

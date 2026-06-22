@@ -1,7 +1,38 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background-color: #FFFFFF;
+  color: #111111;
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom range input */
+input[type="range"] {
+  accent-color: #111111;
+}
+
+/* Smooth scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #FFFFFF; }
+::-webkit-scrollbar-thumb { background: #E9E9E9; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #DADADA; }
+
+/* Focus ring */
+:focus-visible {
+  outline: 2px solid #0084FF;
+  outline-offset: 2px;
+}
+
+/* Selection color */
+::selection {
+  background: #FFD4D9;
+  color: #111111;
+}
